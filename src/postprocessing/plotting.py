@@ -301,9 +301,15 @@ def animate_phi(
 
     def update(frame):
         pcm.set_array(phi_history[frame].ravel())
-        # Remove old contours
-        for c in contour_coll[0].collections:
-            c.remove()
+
+        # Remove old contours in a way that is compatible across matplotlib versions.
+        old_contour = contour_coll[0]
+        old_collections = getattr(old_contour, "collections", None)
+        if old_collections is not None:
+            for c in old_collections:
+                c.remove()
+        else:
+            old_contour.remove()
         contour_coll[0] = ax.contour(mesh.XC, mesh.YC, phi_history[frame],
                                      levels=[0.5], colors="k", linewidths=1)
         title.set_text(f"$t = {t_history[frame]:.4f}$")
