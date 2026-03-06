@@ -23,11 +23,11 @@ This project implements four progressively refined solvers on a uniform 2D Carte
 
 **CDI** (Conservative Diffuse-Interface) adds a diffusion term and an interface-sharpening term to the transport equation, keeping φ bounded between 0 and 1:
 
-$$\frac{\partial \phi}{\partial t} + \nabla \cdot (\mathbf{u}\phi) = \nabla \cdot \left\{ \Gamma \left\[ \epsilon \nabla\phi - \phi(1-\phi)\frac{\nabla\phi}{|\nabla\phi|} \right] \right\}$$
+$$\frac{\partial \phi}{\partial t} + \nabla \cdot (\mathbf{u}\phi) = \nabla \cdot \left\\{ \Gamma \left[ \epsilon \nabla\phi - \phi(1-\phi)\frac{\nabla\phi}{|\nabla\phi|} \right] \right\\}$$
 
 **ACDI** improves on CDI by replacing the nonlinear sharpening term with one expressed in terms of a signed-distance-like variable ψ, eliminating artificial grid-alignment distortion of the interface:
 
-$$\frac{\partial \phi}{\partial t} + \nabla \cdot (\mathbf{u}\phi) = \nabla \cdot \left\{ \Gamma \left\[ \epsilon \nabla\phi - \frac{1}{4}\left(1 - \tanh^2\!\left(\frac{\psi}{2\epsilon}\right)\right)\frac{\nabla\psi}{|\nabla\psi|} \right] \right\}$$
+$$\frac{\partial \phi}{\partial t} + \nabla \cdot (\mathbf{u}\phi) = \nabla \cdot \left\\{ \Gamma \left[ \epsilon \nabla\phi - \frac{1}{4}\left(1 - \tanh^2\!\left(\frac{\psi}{2\epsilon}\right)\right)\frac{\nabla\psi}{|\nabla\psi|} \right] \right\\}$$
 
 ---
 
