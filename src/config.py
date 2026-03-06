@@ -92,7 +92,7 @@ DROP_ADVECTION_CFG: dict = {
     "velocity": "uniform",
     "U0": 5.0,            # advection velocity (problem statement)
     "V0": 0.0,
-    "t_end": 0.1,         # drop travels U0 * t_end = 0.5 domain lengths
+    "t_end": 1,         # drop travels U0 * t_end = 0.5 domain lengths
     "dt": 1e-4,           # explicit Euler / RK4 time step
 }
 
