@@ -1,0 +1,134 @@
+"""
+solvers/task3_cdi_2nd_rk4.py
+-----------------------------
+ME 5351 HW2 - Task 3: CDI with 2nd-order spatial and RK4 temporal discretisation.
+
+Numerical method
+~~~~~~~~~~~~~~~~
+  Spatial scheme  : 2nd-order central differencing for advection
+  Regularisation  : CDI (Jain 2022 Eq. 6-8), gradients also 2nd-order central
+  Time integration: Classical 4th-order Runge-Kutta (RK4)
+
+Governing equation
+~~~~~~~~~~~~~~~~~~
+    d(phi)/dt + div(u * phi) = R_CDI(phi)
+
+Elevating both the advective scheme and the time integrator to higher order
+reduces numerical diffusion and allows the interface to remain sharp for
+longer simulation times compared to Task 2.
+
+Key differences from Task 2
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  - `central_flux` replaces `upwind_flux` for the advection operator.
+  - `rk4_step` replaces `euler_step`; the RHS callable is invoked 4 times
+    per time step, each at the appropriate intermediate time level to
+    correctly capture time-varying velocity fields (shear flow test case).
+  - CFL constraint is less restrictive (stability region of RK4 for pure
+    advection: CFL_max ~ 2sqrt(2) ~ 2.83), but the regularisation diffusive
+    limit still applies:  eps * dt / dx^2 <= ~0.5.
+
+Usage
+-----
+    from solvers.task3_cdi_2nd_rk4 import run_task3
+    phi_history, t_history = run_task3(cfg)
+
+Expected config keys
+--------------------
+  mesh      : Mesh
+  phi0      : np.ndarray, shape (ny, nx)
+  velocity  : str  -- 'uniform' | 'shear'
+  eps       : float  -- interface half-thickness
+  t_end     : float
+  dt        : float
+  save_freq : int
+  output_dir: str  -- path to results/task3/
+"""
+
+import numpy as np
+from typing import Any
+
+from core.mesh import Mesh
+from core.flux_schemes import central_flux
+from core.regularization import cdi_regularization
+from core.time_integration import rk4_step, compute_cfl
+
+
+def build_rhs(
+    phi: np.ndarray,
+    t: float,
+    mesh: Mesh,
+    velocity_fn,
+    eps: float,
+) -> np.ndarray:
+    """Assemble the CDI RHS: 2nd-order central advection + CDI regularisation.
+
+    Parameters
+    ----------
+    phi : np.ndarray, shape (ny, nx)
+        Current volume-fraction field.
+    t : float
+        Current time (passed to velocity_fn for time-dependent fields).
+    mesh : Mesh
+        Computational mesh.
+    velocity_fn : callable
+        Returns (u_face, v_face) given (mesh, t).
+    eps : float
+        Interface half-thickness parameter.
+
+    Returns
+    -------
+    rhs : np.ndarray, shape (ny, nx)
+        d(phi)/dt = -div(u*phi) [central] + R_CDI(phi).
+    """
+    u_face, v_face = velocity_fn(mesh, t)
+    adv = central_flux(phi, u_face, v_face, mesh)
+    # Gamma >= |u|_max / (2*eps/dx - 1)
+    u_max = max(np.max(np.abs(u_face)), np.max(np.abs(v_face)), 1e-14)
+    eps_star = eps / mesh.dx
+    Gamma = u_max / max(2.0 * eps_star - 1.0, 0.1)
+    reg = cdi_regularization(phi, mesh, eps, Gamma=Gamma)
+    return adv + reg
+
+
+def run_task3(cfg: dict[str, Any]) -> tuple[list[np.ndarray], list[float]]:
+    """Run the Task 3 solver (CDI + central + RK4) and return solution history.
+
+    Parameters
+    ----------
+    cfg : dict
+        Configuration dictionary.  See module docstring for required keys.
+
+    Returns
+    -------
+    phi_history : list of np.ndarray
+        Snapshots of the volume-fraction field.
+    t_history : list of float
+        Corresponding simulation times.
+    """
+    mesh = cfg["mesh"]
+    phi = cfg["phi0"].copy()
+    velocity_fn = cfg["velocity_fn"]
+    eps = cfg["eps"]
+    t_end = cfg["t_end"]
+    dt = cfg["dt"]
+    save_freq = cfg.get("save_freq", 10)
+
+    def rhs_fn(phi, t):
+        return build_rhs(phi, t, mesh, velocity_fn, eps)
+
+    phi_history = [phi.copy()]
+    t_history = [0.0]
+
+    t = 0.0
+    step = 0
+    while t < t_end - 1e-14:
+        dt_actual = min(dt, t_end - t)
+        phi = rk4_step(phi, t, dt_actual, rhs_fn)
+        t += dt_actual
+        step += 1
+
+        if step % save_freq == 0 or t >= t_end - 1e-14:
+            phi_history.append(phi.copy())
+            t_history.append(t)
+
+    return phi_history, t_history
