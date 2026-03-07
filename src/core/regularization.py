@@ -19,11 +19,14 @@ parameter that must satisfy Gamma >= |u|_max / (2*eps/dx - 1).
 
 ACDI (Accurate CDI) -- Jain 2022, Eq. (20)-(21)
 -------------------------------------------------
-ACDI uses a modified regularisation with the diffusion coefficient halved:
+ACDI reformulates the sharpening term using the transformed variable
+psi = eps * ln(phi / (1-phi)):
 
-    R_ACDI = Gamma * [ 0.5 * eps * lap(phi) - div( phi*(1-phi)*n_hat ) ]
+    R_ACDI = Gamma * div[ eps*grad(phi) - coeff*n_psi ]
 
-paired with skew-symmetric advection splitting.
+where coeff = (1/4)*(1 - tanh^2(psi / (2*eps))) and
+n_psi = grad(psi) / |grad(psi)| is the interface normal computed from psi.
+Paired with skew-symmetric advection splitting.
 Gamma >= |u|_max for ACDI.
 
 Both methods preserve:
@@ -142,11 +145,12 @@ def acdi_regularization(
 ) -> np.ndarray:
     """Return the ACDI regularisation RHS term (Jain 2022, Eq. 20-21).
 
-    Implements:
-        R_ACDI = Gamma * [ 0.5*eps*lap(phi) - div( phi*(1-phi)*n_hat ) ]
+    Uses the transformed variable psi = eps * ln(phi / (1-phi)) so the
+    sharpening coefficient becomes (1/4)*(1 - tanh^2(psi/(2*eps))) and the
+    interface normal is computed from grad(psi).
 
     In flux form:
-        R = Gamma * div[ 0.5*eps*grad(phi) - phi*(1-phi)*n_hat ]
+        R = Gamma * div[ eps*grad(phi) - coeff*n_psi ]
 
     Parameters
     ----------
@@ -167,31 +171,56 @@ def acdi_regularization(
     nx_c, ny_c = mesh.nx, mesh.ny
     dx, dy = mesh.dx, mesh.dy
 
-    dphi_dy_cc = (np.roll(phi, -1, axis=0) - np.roll(phi, 1, axis=0)) / (2.0 * dy)
+    # Transformed variable psi = eps * ln(phi / (1 - phi))
+    omega = 1e-100
+    psi = eps * np.log((phi + omega) / (1.0 - phi + omega))
+
+    # Cell-centre gradients of psi
+    dpsi_dx_cc = (np.roll(psi, -1, axis=1) - np.roll(psi, 1, axis=1)) / (2.0 * dx)
+    dpsi_dy_cc = (np.roll(psi, -1, axis=0) - np.roll(psi, 1, axis=0)) / (2.0 * dy)
+
+    # Cell-centre gradients of phi (for diffusion term)
     dphi_dx_cc = (np.roll(phi, -1, axis=1) - np.roll(phi, 1, axis=1)) / (2.0 * dx)
+    dphi_dy_cc = (np.roll(phi, -1, axis=0) - np.roll(phi, 1, axis=0)) / (2.0 * dy)
 
     # --- x-faces ---
     Ax = np.empty((ny_c, nx_c + 1))
     for i in range(nx_c + 1):
         il = (i - 1) % nx_c
         ir = i % nx_c
-        phi_f = 0.5 * (phi[:, il] + phi[:, ir])
+
+        # phi diffusion term
         dphi_dx_f = (phi[:, ir] - phi[:, il]) / dx
-        dphi_dy_f = 0.5 * (dphi_dy_cc[:, il] + dphi_dy_cc[:, ir])
-        mag_f = np.sqrt(dphi_dx_f**2 + dphi_dy_f**2) + 1e-14
-        # ACDI flux: 0.5*eps*dphi_dx - phi*(1-phi)*n_x
-        Ax[:, i] = 0.5 * eps * dphi_dx_f - phi_f * (1.0 - phi_f) * dphi_dx_f / mag_f
+
+        # psi sharpening term
+        dpsi_dx_f = (psi[:, ir] - psi[:, il]) / dx
+        dpsi_dy_f = 0.5 * (dpsi_dy_cc[:, il] + dpsi_dy_cc[:, ir])
+        psi_f = 0.5 * (psi[:, il] + psi[:, ir])
+
+        mag_psi_f = np.sqrt(dpsi_dx_f**2 + dpsi_dy_f**2) + 1e-14
+
+        # ACDI coefficient: (1/4)(1 - tanh^2(psi / (2*eps)))
+        coeff = 0.25 * (1.0 - np.tanh(psi_f / (2.0 * eps)) ** 2)
+
+        Ax[:, i] = eps * dphi_dx_f - coeff * dpsi_dx_f / mag_psi_f
 
     # --- y-faces ---
     Ay = np.empty((ny_c + 1, nx_c))
     for j in range(ny_c + 1):
         jb = (j - 1) % ny_c
         jt = j % ny_c
-        phi_f = 0.5 * (phi[jb, :] + phi[jt, :])
+
         dphi_dy_f = (phi[jt, :] - phi[jb, :]) / dy
-        dphi_dx_f = 0.5 * (dphi_dx_cc[jb, :] + dphi_dx_cc[jt, :])
-        mag_f = np.sqrt(dphi_dx_f**2 + dphi_dy_f**2) + 1e-14
-        Ay[j, :] = 0.5 * eps * dphi_dy_f - phi_f * (1.0 - phi_f) * dphi_dy_f / mag_f
+
+        dpsi_dy_f = (psi[jt, :] - psi[jb, :]) / dy
+        dpsi_dx_f = 0.5 * (dpsi_dx_cc[jb, :] + dpsi_dx_cc[jt, :])
+        psi_f = 0.5 * (psi[jb, :] + psi[jt, :])
+
+        mag_psi_f = np.sqrt(dpsi_dx_f**2 + dpsi_dy_f**2) + 1e-14
+
+        coeff = 0.25 * (1.0 - np.tanh(psi_f / (2.0 * eps)) ** 2)
+
+        Ay[j, :] = eps * dphi_dy_f - coeff * dpsi_dy_f / mag_psi_f
 
     rhs = Gamma * ((Ax[:, 1:] - Ax[:, :-1]) / dx + (Ay[1:, :] - Ay[:-1, :]) / dy)
     return rhs

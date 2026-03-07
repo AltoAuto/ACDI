@@ -28,6 +28,7 @@ Notes
 - CFL_target is used by the adaptive time-step controller (if implemented).
   For fixed-dt runs, dt is set explicitly.
 - All paths use forward slashes for cross-platform compatibility.
+- Mesh: paper used 50*50, and 512*512 for convergence test.
 """
 
 import os
@@ -44,8 +45,8 @@ RESULTS_ROOT = os.path.join(PROJECT_ROOT, "results")
 # ---------------------------------------------------------------------------
 
 DEFAULT_MESH_CFG: dict = {
-    "nx": 128,       # cells in x-direction
-    "ny": 128,       # cells in y-direction
+    "nx": 50,       # cells in x-direction
+    "ny": 50,       # cells in y-direction
     "Lx": 1.0,       # domain length in x
     "Ly": 1.0,       # domain length in y
     "x0": 0.0,       # domain origin x
@@ -72,7 +73,7 @@ DEFAULT_DROP_CFG: dict = {
 }
 
 # eps is set dynamically from mesh spacing: eps = eps_factor * dx
-EPS_FACTOR: float = 1.5  # interface half-thickness in units of dx
+EPS_FACTOR: float = 1  # interface half-thickness in units of dx
 
 # ---------------------------------------------------------------------------
 # Solver defaults
@@ -93,7 +94,7 @@ DROP_ADVECTION_CFG: dict = {
     "U0": 5.0,            # advection velocity (problem statement)
     "V0": 0.0,
     "t_end": 1,         # drop travels U0 * t_end = 0.5 domain lengths
-    "dt": 1e-4,           # explicit Euler / RK4 time step
+    "dt": 0.001,           # explicit Euler / RK4 time step
 }
 
 # ---------------------------------------------------------------------------
@@ -103,9 +104,9 @@ DROP_ADVECTION_CFG: dict = {
 SHEAR_FLOW_CFG: dict = {
     "test_case": "shear_flow",
     "velocity": "shear",
-    "T_period": 2.0,      # oscillation period
+    "T_period": 2.0,      # oscillation period (paper used 4)
     "t_end": 2.0,         # run for one full period
-    "dt": 5e-4,
+    "dt": 2.5e-4 ,        # aiming cfl ~ 0.25
 }
 
 # ---------------------------------------------------------------------------
