@@ -44,6 +44,7 @@ RESULTS_ROOT = os.path.join(PROJECT_ROOT, "results")
 # Mesh defaults
 # ---------------------------------------------------------------------------
 
+#Shear test config
 DEFAULT_MESH_CFG: dict = {
     "nx": 256,       # cells in x-direction
     "ny": 256,       # cells in y-direction
@@ -53,6 +54,16 @@ DEFAULT_MESH_CFG: dict = {
     "y0": 0.0,       # domain origin y
 }
 
+'''
+DEFAULT_MESH_CFG: dict = {
+    "nx": 50,
+    "ny": 50,
+    "Lx": 1.0,
+    "Ly": 1.0,
+    "x0": 0.0,
+    "y0": 0.0,
+}
+'''
 # ---------------------------------------------------------------------------
 # Drop geometry defaults
 # ---------------------------------------------------------------------------

@@ -17,17 +17,18 @@ where n_hat = grad(phi) / |grad(phi)| is the interface unit normal,
 eps is the interface half-thickness parameter, and Gamma is a rate
 parameter that must satisfy Gamma >= |u|_max / (2*eps/dx - 1).
 
-ACDI (Accurate CDI) -- Jain 2022, Eq. (20)-(21)
--------------------------------------------------
-ACDI reformulates the sharpening term using the transformed variable
-psi = eps * ln(phi / (1-phi)):
+ACDI (Accurate CDI) -- Jain 2022, Eq. (7), (20)-(21)
+----------------------------------------------------
+ACDI replaces the phi-based sharpening flux with a psi-based form:
 
-    R_ACDI = Gamma * div[ eps*grad(phi) - coeff*n_psi ]
+    R_ACDI = Gamma * div[ eps*grad(phi)
+                          - (1/4)(1 - tanh^2(psi/(2*eps))) * grad(psi)/|grad(psi)| ]
 
-where coeff = (1/4)*(1 - tanh^2(psi / (2*eps))) and
-n_psi = grad(psi) / |grad(psi)| is the interface normal computed from psi.
-Paired with skew-symmetric advection splitting.
-Gamma >= |u|_max for ACDI.
+where psi = eps * ln(phi / (1-phi)) is a signed-distance-like variable.
+The diffusion coefficient is the SAME as CDI (full eps).  The improvement
+comes from using psi -- a smoother function than phi -- to compute the
+sharpening flux and normal, yielding more accurate discrete gradients.
+Gamma >= |u|_max for ACDI (Eq. 9).
 
 Both methods preserve:
   - Global mass (integral of phi) to machine precision.
@@ -78,13 +79,15 @@ def cdi_regularization(
     eps: float,
     Gamma: float = 1.0,
 ) -> np.ndarray:
-    """Return the CDI regularisation RHS term.
+    """Return the CDI regularisation RHS term (Jain 2022, Eq. 1/21).
 
     Implements:
-        R_CDI = Gamma * [ eps * lap(phi) - div( phi*(1-phi)*n_hat ) ]
+        R_CDI = Gamma * div[ eps*grad(phi) - phi*(1-phi)*n_hat ]
 
-    Computed at faces in divergence form for exact conservation:
-        R = Gamma * div[ eps*grad(phi) - phi*(1-phi)*n_hat ]
+    Discretisation follows Jain 2022 Eq. (21): diffusion uses compact face
+    gradients, sharpening flux (phi*(1-phi)*n_hat) is computed at cell centres
+    and averaged to faces.  This ensures better cancellation between the
+    diffusion and sharpening terms at the discrete level.
 
     Parameters
     ----------
@@ -105,32 +108,30 @@ def cdi_regularization(
     nx_c, ny_c = mesh.nx, mesh.ny
     dx, dy = mesh.dx, mesh.dy
 
-    # Cell-centre gradients (periodic)
-    dphi_dy_cc = (np.roll(phi, -1, axis=0) - np.roll(phi, 1, axis=0)) / (2.0 * dy)
+    # Cell-centre gradients and normalised normal (periodic)
     dphi_dx_cc = (np.roll(phi, -1, axis=1) - np.roll(phi, 1, axis=1)) / (2.0 * dx)
+    dphi_dy_cc = (np.roll(phi, -1, axis=0) - np.roll(phi, 1, axis=0)) / (2.0 * dy)
+    mag_cc = np.sqrt(dphi_dx_cc**2 + dphi_dy_cc**2) + 1e-14
+
+    # Cell-centre sharpening vector: phi*(1-phi)*n_hat
+    sharp_x_cc = phi * (1.0 - phi) * dphi_dx_cc / mag_cc
+    sharp_y_cc = phi * (1.0 - phi) * dphi_dy_cc / mag_cc
 
     # --- x-faces (nx+1 faces) ---
     Ax = np.empty((ny_c, nx_c + 1))
     for i in range(nx_c + 1):
         il = (i - 1) % nx_c
         ir = i % nx_c
-        phi_f = 0.5 * (phi[:, il] + phi[:, ir])
         dphi_dx_f = (phi[:, ir] - phi[:, il]) / dx
-        dphi_dy_f = 0.5 * (dphi_dy_cc[:, il] + dphi_dy_cc[:, ir])
-        mag_f = np.sqrt(dphi_dx_f**2 + dphi_dy_f**2) + 1e-14
-        # Flux: eps*dphi_dx - phi*(1-phi)*n_x = eps*dphi_dx - phi*(1-phi)*dphi_dx/|grad|
-        Ax[:, i] = eps * dphi_dx_f - phi_f * (1.0 - phi_f) * dphi_dx_f / mag_f
+        Ax[:, i] = eps * dphi_dx_f - 0.5 * (sharp_x_cc[:, il] + sharp_x_cc[:, ir])
 
     # --- y-faces (ny+1 faces) ---
     Ay = np.empty((ny_c + 1, nx_c))
     for j in range(ny_c + 1):
         jb = (j - 1) % ny_c
         jt = j % ny_c
-        phi_f = 0.5 * (phi[jb, :] + phi[jt, :])
         dphi_dy_f = (phi[jt, :] - phi[jb, :]) / dy
-        dphi_dx_f = 0.5 * (dphi_dx_cc[jb, :] + dphi_dx_cc[jt, :])
-        mag_f = np.sqrt(dphi_dx_f**2 + dphi_dy_f**2) + 1e-14
-        Ay[j, :] = eps * dphi_dy_f - phi_f * (1.0 - phi_f) * dphi_dy_f / mag_f
+        Ay[j, :] = eps * dphi_dy_f - 0.5 * (sharp_y_cc[jb, :] + sharp_y_cc[jt, :])
 
     # Divergence of the regularisation flux, scaled by Gamma
     rhs = Gamma * ((Ax[:, 1:] - Ax[:, :-1]) / dx + (Ay[1:, :] - Ay[:-1, :]) / dy)
@@ -143,14 +144,20 @@ def acdi_regularization(
     eps: float,
     Gamma: float = 1.0,
 ) -> np.ndarray:
-    """Return the ACDI regularisation RHS term (Jain 2022, Eq. 20-21).
+    """Return the ACDI regularisation RHS term (Jain 2022, Eq. 7/21).
 
-    Uses the transformed variable psi = eps * ln(phi / (1-phi)) so the
-    sharpening coefficient becomes (1/4)*(1 - tanh^2(psi/(2*eps))) and the
-    interface normal is computed from grad(psi).
+    Implements (Eq. 7):
+        R_ACDI = Gamma * div[ eps*grad(phi)
+                              - (1/4)(1 - tanh^2(psi/(2*eps))) * grad(psi)/|grad(psi)| ]
 
-    In flux form:
-        R = Gamma * div[ eps*grad(phi) - coeff*n_psi ]
+    where psi = eps * ln(phi / (1 - phi)) is the signed-distance-like variable.
+    The diffusion uses full eps (same as CDI).  The sharpening flux uses
+    the psi-based form for improved discrete accuracy (psi is smoother
+    than phi, yielding more accurate gradient/normal computations).
+
+    Discretisation follows Jain 2022 Eq. (21): diffusion uses compact face
+    gradients, sharpening flux (coeff*n_hat) is computed at cell centres
+    and averaged to faces.
 
     Parameters
     ----------
@@ -171,52 +178,37 @@ def acdi_regularization(
     nx_c, ny_c = mesh.nx, mesh.ny
     dx, dy = mesh.dx, mesh.dy
 
-    # Transformed variable psi = eps * ln(phi / (1 - phi))
-    omega = 1e-100
-    psi = eps * np.log((phi + omega) / (1.0 - phi + omega))
+    # Signed-distance-like variable: psi = eps * ln((phi+w) / (1-phi+w))
+    # Clip phi to [0,1] first (paper Sec. 3.1), then add w per Eq. (8).
+    w = 1e-100
+    phi_c = np.clip(phi, 0.0, 1.0)
+    psi = eps * np.log((phi_c + w) / (1.0 - phi_c + w))
 
-    # Cell-centre gradients of psi
+    # Cell-centre gradients of psi and normalised normal
     dpsi_dx_cc = (np.roll(psi, -1, axis=1) - np.roll(psi, 1, axis=1)) / (2.0 * dx)
     dpsi_dy_cc = (np.roll(psi, -1, axis=0) - np.roll(psi, 1, axis=0)) / (2.0 * dy)
+    mag_psi_cc = np.sqrt(dpsi_dx_cc**2 + dpsi_dy_cc**2) + 1e-14
+
+    # Cell-centre sharpening vector: coeff * n_hat (Eq. 21)
+    coeff_cc = 0.25 * (1.0 - np.tanh(psi / (2.0 * eps)) ** 2)
+    sharp_x_cc = coeff_cc * dpsi_dx_cc / mag_psi_cc
+    sharp_y_cc = coeff_cc * dpsi_dy_cc / mag_psi_cc
 
     # --- x-faces ---
     Ax = np.empty((ny_c, nx_c + 1))
     for i in range(nx_c + 1):
         il = (i - 1) % nx_c
         ir = i % nx_c
-
-        # phi diffusion term
         dphi_dx_f = (phi[:, ir] - phi[:, il]) / dx
-
-        # psi sharpening term
-        dpsi_dx_f = (psi[:, ir] - psi[:, il]) / dx
-        dpsi_dy_f = 0.5 * (dpsi_dy_cc[:, il] + dpsi_dy_cc[:, ir])
-        psi_f = 0.5 * (psi[:, il] + psi[:, ir])
-
-        mag_psi_f = np.sqrt(dpsi_dx_f**2 + dpsi_dy_f**2) + 1e-14
-
-        # ACDI coefficient: (1/4)(1 - tanh^2(psi / (2*eps)))
-        coeff = 0.25 * (1.0 - np.tanh(psi_f / (2.0 * eps)) ** 2)
-
-        Ax[:, i] = eps * dphi_dx_f - coeff * dpsi_dx_f / mag_psi_f
+        Ax[:, i] = eps * dphi_dx_f - 0.5 * (sharp_x_cc[:, il] + sharp_x_cc[:, ir])
 
     # --- y-faces ---
     Ay = np.empty((ny_c + 1, nx_c))
     for j in range(ny_c + 1):
         jb = (j - 1) % ny_c
         jt = j % ny_c
-
         dphi_dy_f = (phi[jt, :] - phi[jb, :]) / dy
-
-        dpsi_dy_f = (psi[jt, :] - psi[jb, :]) / dy
-        dpsi_dx_f = 0.5 * (dpsi_dx_cc[jb, :] + dpsi_dx_cc[jt, :])
-        psi_f = 0.5 * (psi[jb, :] + psi[jt, :])
-
-        mag_psi_f = np.sqrt(dpsi_dx_f**2 + dpsi_dy_f**2) + 1e-14
-
-        coeff = 0.25 * (1.0 - np.tanh(psi_f / (2.0 * eps)) ** 2)
-
-        Ay[j, :] = eps * dphi_dy_f - coeff * dpsi_dy_f / mag_psi_f
+        Ay[j, :] = eps * dphi_dy_f - 0.5 * (sharp_y_cc[jb, :] + sharp_y_cc[jt, :])
 
     rhs = Gamma * ((Ax[:, 1:] - Ax[:, :-1]) / dx + (Ay[1:, :] - Ay[:-1, :]) / dy)
     return rhs

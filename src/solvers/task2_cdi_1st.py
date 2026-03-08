@@ -59,6 +59,7 @@ def build_rhs(
     mesh: Mesh,
     velocity_fn,
     eps: float,
+    u_max_global: float,
 ) -> np.ndarray:
     """Assemble the CDI RHS: upwind advection + CDI regularisation.
 
@@ -74,6 +75,8 @@ def build_rhs(
         Returns (u_face, v_face) given (mesh, t).
     eps : float
         Interface half-thickness parameter.
+    u_max_global : float
+        Global maximum velocity magnitude (over all time).
 
     Returns
     -------
@@ -82,10 +85,9 @@ def build_rhs(
     """
     u_face, v_face = velocity_fn(mesh, t)
     adv = upwind_flux(phi, u_face, v_face, mesh)
-    # Gamma >= |u|_max / (2*eps/dx - 1)
-    u_max = max(np.max(np.abs(u_face)), np.max(np.abs(v_face)), 1e-14)
+    # Gamma >= |u|_max / (2*eps/dx - 1), using global max velocity
     eps_star = eps / mesh.dx
-    Gamma = u_max / max(2.0 * eps_star - 1.0, 0.1)
+    Gamma = u_max_global / max(2.0 * eps_star - 1.0, 0.1)
     reg = cdi_regularization(phi, mesh, eps, Gamma=Gamma)
     return adv + reg
 
@@ -113,8 +115,12 @@ def run_task2(cfg: dict[str, Any]) -> tuple[list[np.ndarray], list[float]]:
     dt = cfg["dt"]
     save_freq = cfg.get("save_freq", 10)
 
+    # Global max velocity (at t=0 when cos(pi*t/T)=1 for shear flow)
+    u_face0, v_face0 = velocity_fn(mesh, 0.0)
+    u_max_g = max(np.max(np.abs(u_face0)), np.max(np.abs(v_face0)), 1e-14)
+
     def rhs_fn(phi, t):
-        return build_rhs(phi, t, mesh, velocity_fn, eps)
+        return build_rhs(phi, t, mesh, velocity_fn, eps, u_max_g)
 
     phi_history = [phi.copy()]
     t_history = [0.0]
