@@ -45,8 +45,8 @@ RESULTS_ROOT = os.path.join(PROJECT_ROOT, "results")
 # ---------------------------------------------------------------------------
 
 DEFAULT_MESH_CFG: dict = {
-    "nx": 50,       # cells in x-direction
-    "ny": 50,       # cells in y-direction
+    "nx": 256,       # cells in x-direction
+    "ny": 256,       # cells in y-direction
     "Lx": 1.0,       # domain length in x
     "Ly": 1.0,       # domain length in y
     "x0": 0.0,       # domain origin x
@@ -81,7 +81,7 @@ EPS_FACTOR: float = 1  # interface half-thickness in units of dx
 
 DEFAULT_SOLVER_CFG: dict = {
     "CFL_target": 0.4,    # target CFL for adaptive dt (not used if dt given)
-    "save_freq": 10,      # save every N time steps
+    "save_freq": 60,      # save every N time steps
 }
 
 # ---------------------------------------------------------------------------
@@ -104,8 +104,8 @@ DROP_ADVECTION_CFG: dict = {
 SHEAR_FLOW_CFG: dict = {
     "test_case": "shear_flow",
     "velocity": "shear",
-    "T_period": 2.0,      # oscillation period (paper used 4)
-    "t_end": 2.0,         # run for one full period
+    "T_period": 4.0,      # oscillation period (paper used 4)
+    "t_end": 4.0,         # run for one full period
     "dt": 2.5e-4 ,        # aiming cfl ~ 0.25
 }
 

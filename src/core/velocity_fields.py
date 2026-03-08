@@ -95,12 +95,12 @@ def shear_flow_velocity(
     xf = mesh.x0 + np.arange(mesh.nx + 1) * mesh.dx          # (nx+1,)
     yc = mesh.yc                                                # (ny,)
     XF, YF = np.meshgrid(xf, yc, indexing='xy')                # (ny, nx+1)
-    u_face = np.sin(np.pi * XF)**2 * np.sin(2.0 * np.pi * YF) * cos_t
+    u_face = -np.sin(np.pi * XF)**2 * np.sin(2.0 * np.pi * YF) * cos_t
 
     # y-faces: located at x = xc[i], y = y0 + j*dy  (cell-centre x)
     xc = mesh.xc                                                # (nx,)
     yf = mesh.y0 + np.arange(mesh.ny + 1) * mesh.dy            # (ny+1,)
     XF2, YF2 = np.meshgrid(xc, yf, indexing='xy')              # (ny+1, nx)
-    v_face = -np.sin(2.0 * np.pi * XF2) * np.sin(np.pi * YF2)**2 * cos_t
+    v_face = np.sin(2.0 * np.pi * XF2) * np.sin(np.pi * YF2)**2 * cos_t
 
     return u_face, v_face

@@ -179,10 +179,6 @@ def acdi_regularization(
     dpsi_dx_cc = (np.roll(psi, -1, axis=1) - np.roll(psi, 1, axis=1)) / (2.0 * dx)
     dpsi_dy_cc = (np.roll(psi, -1, axis=0) - np.roll(psi, 1, axis=0)) / (2.0 * dy)
 
-    # Cell-centre gradients of phi (for diffusion term)
-    dphi_dx_cc = (np.roll(phi, -1, axis=1) - np.roll(phi, 1, axis=1)) / (2.0 * dx)
-    dphi_dy_cc = (np.roll(phi, -1, axis=0) - np.roll(phi, 1, axis=0)) / (2.0 * dy)
-
     # --- x-faces ---
     Ax = np.empty((ny_c, nx_c + 1))
     for i in range(nx_c + 1):

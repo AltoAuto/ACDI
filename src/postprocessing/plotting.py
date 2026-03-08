@@ -261,7 +261,7 @@ def animate_phi(
     t_history: list[float],
     mesh: Mesh,
     save_path: str,
-    fps: int = 10,
+    fps: int = 30,
     cmap: str = "RdBu_r",
 ) -> FuncAnimation:
     """Create and save an animation of the phi field evolving in time.
