@@ -44,6 +44,7 @@ RESULTS_ROOT = os.path.join(PROJECT_ROOT, "results")
 # Mesh defaults
 # ---------------------------------------------------------------------------
 
+'''
 #Shear test config
 DEFAULT_MESH_CFG: dict = {
     "nx": 256,       # cells in x-direction
@@ -53,8 +54,8 @@ DEFAULT_MESH_CFG: dict = {
     "x0": 0.0,       # domain origin x
     "y0": 0.0,       # domain origin y
 }
-
 '''
+
 DEFAULT_MESH_CFG: dict = {
     "nx": 50,
     "ny": 50,
@@ -63,7 +64,6 @@ DEFAULT_MESH_CFG: dict = {
     "x0": 0.0,
     "y0": 0.0,
 }
-'''
 # ---------------------------------------------------------------------------
 # Drop geometry defaults
 # ---------------------------------------------------------------------------
@@ -104,8 +104,8 @@ DROP_ADVECTION_CFG: dict = {
     "velocity": "uniform",
     "U0": 5.0,            # advection velocity (problem statement)
     "V0": 0.0,
-    "t_end": 1,         # drop travels U0 * t_end = 0.5 domain lengths
-    "dt": 0.001,           # explicit Euler / RK4 time step
+    "t_end": 1.0,       # 5 complete laps; drop returns to start, E = |phi_f - phi_0|
+    "dt": 0.001,           # explicit Euler / RK4 time step (paper uses dt=0.001)
 }
 
 # ---------------------------------------------------------------------------

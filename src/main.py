@@ -144,7 +144,7 @@ def build_cfg(
 def run_convergence_study(task_id: int, test_case: str, args: argparse.Namespace) -> None:
     """Run the solver at multiple mesh resolutions and plot convergence.
 
-    Mesh sizes: nx in [32, 64, 128, 256] (square meshes).
+    Mesh sizes: nx in [32, 64, 128, 256, 512](square meshes).
     dt scaled as dt ~ dx to keep CFL constant across refinements.
 
     Parameters
@@ -159,11 +159,12 @@ def run_convergence_study(task_id: int, test_case: str, args: argparse.Namespace
     test_case_cfg = DROP_ADVECTION_CFG if test_case == "drop" else SHEAR_FLOW_CFG
     run_fn = run_drop_advection if test_case == "drop" else run_shear_flow
 
-    nx_list = [32, 64, 128, 256]
+    nx_list = [32, 64, 128, 256, 512]
     dx_list = []
     errors_l1 = []
     errors_l2 = []
     errors_linf = []
+    errors_mass = []
 
     # Reference dt for scaling
     base_dt = test_case_cfg["dt"]
@@ -185,6 +186,7 @@ def run_convergence_study(task_id: int, test_case: str, args: argparse.Namespace
         errors_l1.append(metrics["L1"])
         errors_l2.append(metrics["L2"])
         errors_linf.append(metrics["Linf"])
+        errors_mass.append(metrics["mass_error"])
         print(f"L2={metrics['L2']:.4e}")
 
     label = TASK_CONFIGS[task_id]["label"]
@@ -198,6 +200,29 @@ def run_convergence_study(task_id: int, test_case: str, args: argparse.Namespace
     plot_convergence(dx_list, error_dict, title=f"Convergence: {label} ({test_case})",
                      save_path=save_path)
     print(f"  Convergence plot saved to {save_path}")
+
+    # Summary table with convergence rates between successive refinements
+    print(f"\n### Convergence Table: {label} ({test_case})\n")
+    print("| nx | dx | L1 | L1 rate | L2 | L2 rate | Linf | Linf rate | mass error |")
+    print("|---|---|---|---|---|---|---|---|---|")
+    for k, nx in enumerate(nx_list):
+        l1   = errors_l1[k]
+        l2   = errors_l2[k]
+        li   = errors_linf[k]
+        mass = errors_mass[k]
+        dx   = dx_list[k]
+        if k == 0:
+            print(f"| {nx} | {dx:.4e} | {l1:.4e} | — | {l2:.4e} | — | {li:.4e} | — | {mass:.4e} |")
+        else:
+            def rate(e_prev, e_curr, dx_prev, dx_curr):
+                if e_curr <= 0 or e_prev <= 0:
+                    return float("nan")
+                return np.log(e_prev / e_curr) / np.log(dx_prev / dx_curr)
+            r1 = rate(errors_l1[k-1],   l1, dx_list[k-1], dx)
+            r2 = rate(errors_l2[k-1],   l2, dx_list[k-1], dx)
+            ri = rate(errors_linf[k-1], li, dx_list[k-1], dx)
+            print(f"| {nx} | {dx:.4e} | {l1:.4e} | {r1:.2f} | {l2:.4e} | {r2:.2f} | {li:.4e} | {ri:.2f} | {mass:.4e} |")
+    print()
 
 
 def main() -> None:
