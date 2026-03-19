@@ -15,7 +15,7 @@ IMPACT_DEFAULTS = {
     "mu1":  2e-3,  "mu2":  4e-5,      # liquid / gas viscosity
     "sigma": 0.01,                     # surface tension (We=100)
     "g":     0.5,                      # gravity (non-dimensional, downward)
-    "eps_factor": 1.0,                 # eps = eps_factor * dx  (ACDI: sharper = less kappa noise)
+    "eps_factor": 2.0,                 # eps = eps_factor * dx  (wider = less CSF kappa noise)
     "drop_R":  0.5,                    # drop radius (D/2)
     "drop_cx": 2.0,                    # drop x-centre
     "drop_cy": 3.0,                    # drop y-centre

@@ -108,6 +108,10 @@ def cdi_regularization(
     """
     dx, dy = mesh.dx, mesh.dy
 
+    # Clip phi to [0,1] for sharpening amplitude (phi*(1-phi) must stay >= 0).
+    # Gradients for n_hat use raw phi so interface normals are unaffected.
+    phi_c = np.clip(phi, 0.0, 1.0)
+
     # Cell-centre unit normals from 3-point central differences (both directions)
     dphi_dx_cc = (np.roll(phi, -1, axis=1) - np.roll(phi, 1, axis=1)) / (2.0 * dx)
     dphi_dy_cc = (np.roll(phi, -1, axis=0) - np.roll(phi, 1, axis=0)) / (2.0 * dy)
@@ -117,16 +121,16 @@ def cdi_regularization(
 
     # x-face fluxes: A_x at face (i+1/2) between cells i and i+1
     # n_hat at face = arithmetic average of CC normals (Eq. 21 overbar notation)
-    phi_r = np.roll(phi, -1, axis=1)
-    dphi_dx_f = (phi_r - phi) / dx
-    phi_bar = 0.5 * (phi + phi_r)
+    phi_r = np.roll(phi_c, -1, axis=1)
+    dphi_dx_f = (np.roll(phi, -1, axis=1) - phi) / dx
+    phi_bar = 0.5 * (phi_c + phi_r)
     nx_hat_f = 0.5 * (nx_hat_cc + np.roll(nx_hat_cc, -1, axis=1))
     Ax = eps * dphi_dx_f - phi_bar * (1.0 - phi_bar) * nx_hat_f
 
     # y-face fluxes: A_y at face (j+1/2) between rows j and j+1
-    phi_t = np.roll(phi, -1, axis=0)
-    dphi_dy_f = (phi_t - phi) / dy
-    phi_bar = 0.5 * (phi + phi_t)
+    phi_t = np.roll(phi_c, -1, axis=0)
+    dphi_dy_f = (np.roll(phi, -1, axis=0) - phi) / dy
+    phi_bar = 0.5 * (phi_c + phi_t)
     ny_hat_f = 0.5 * (ny_hat_cc + np.roll(ny_hat_cc, -1, axis=0))
     Ay = eps * dphi_dy_f - phi_bar * (1.0 - phi_bar) * ny_hat_f
 

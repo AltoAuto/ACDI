@@ -66,6 +66,6 @@ def drop_pool_ic(
 
     # --- Velocity: drop falls downward at drop_U ---
     u_cc = np.zeros_like(phi)
-    v_cc = -cfg["drop_U"] * (phi_drop > 0.5).astype(float)
+    v_cc = -cfg["drop_U"] * phi_drop
 
     return phi, u_cc, v_cc
